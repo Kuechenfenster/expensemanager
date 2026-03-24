@@ -2,7 +2,6 @@
 {% set active_tab = 'expenses' %}
 
 {% block content %}
-<!-- Quick Add Form -->
 <section class="section">
     <h1 class="section-title">Add Expense</h1>
     
@@ -43,30 +42,42 @@
                 <input type="text" id="description" name="description" placeholder="Optional details...">
             </div>
             
-            <div class="form-field file-field">
-                <label for="invoice">Invoice</label>
-                <div class="file-upload" id="fileUpload">
-                    <input type="file" id="invoice" name="invoice" accept="image/*,.pdf" hidden>
-                    <span class="file-label">📎 Attach</span>
-                    <span class="file-name" id="fileName"></span>
-                </div>
-            </div>
-            
             <div class="form-field submit-field">
                 <label>&nbsp;</label>
-                <button type="submit" class="btn-primary">Add</button>
+                <button type="submit" class="btn-primary">Add Expense</button>
             </div>
         </div>
         
-        <div id="ocrStatus" class="ocr-status" style="display: none;">
-            <span class="spinner"></span> Reading invoice...
+        <!-- Camera/File Upload -->
+        <div class="upload-section">
+            <div class="upload-buttons">
+                <button type="button" class="upload-btn" id="cameraBtn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                        <circle cx="12" cy="13" r="4"/>
+                    </svg>
+                    Take Photo
+                </button>
+                <button type="button" class="upload-btn" id="fileBtn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                    Upload File
+                </button>
+            </div>
+            <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
+            <input type="file" id="fileInput" accept="image/*,.pdf" hidden>
+            <input type="hidden" id="invoiceFilename" name="invoice_filename">
+            <input type="hidden" id="ocrData" name="ocr_data">
+            <div id="uploadStatus" class="upload-status"></div>
         </div>
         
         <div id="formMessage" class="message" style="display: none;"></div>
     </form>
 </section>
 
-<!-- Expenses List -->
 <section class="section">
     <div class="section-header">
         <h2 class="section-title">Recent Expenses</h2>
@@ -89,16 +100,13 @@
             {% for expense in expenses %}
             <tr data-id="{{ expense.id }}">
                 <td class="col-date">{{ expense.date.strftime('%d.%m.%Y') }}</td>
-                <td class="col-category">
-                    <span class="tag">{{ expense.category }}</span>
-                </td>
+                <td class="col-category"><span class="tag">{{ expense.category }}</span></td>
                 <td class="col-vendor">{{ expense.vendor or '—' }}</td>
                 <td class="col-desc">{{ expense.description or '—' }}</td>
                 <td class="col-amount">€{{ "%.2f" % expense.amount }}</td>
                 <td class="col-actions">
                     {% if expense.invoice_filename %}
-                    <a href="{{ url_for('uploaded_file', filename=expense.invoice_filename) }}" 
-                       target="_blank" class="btn-icon" title="View invoice">📄</a>
+                    <a href="{{ url_for('uploaded_file', filename=expense.invoice_filename) }}" target="_blank" class="btn-icon" title="View invoice">📄</a>
                     {% endif %}
                     <button class="btn-icon delete-btn" data-id="{{ expense.id }}" title="Delete">🗑️</button>
                 </td>
@@ -126,11 +134,61 @@
     </div>
 </div>
 
+<!-- Invoice Review Modal -->
+<div id="reviewModal" class="modal">
+    <div class="modal-box modal-large">
+        <h3>Review Invoice Data</h3>
+        <p class="modal-subtitle">Please verify and correct the extracted information</p>
+        
+        <div class="review-content">
+            <div class="review-preview">
+                <img id="reviewImage" src="" alt="Invoice preview">
+            </div>
+            
+            <div class="review-fields">
+                <div class="form-field">
+                    <label for="reviewAmount">Amount (€)</label>
+                    <input type="number" id="reviewAmount" step="0.01" placeholder="0.00">
+                </div>
+                
+                <div class="form-field">
+                    <label for="reviewDate">Date</label>
+                    <input type="date" id="reviewDate">
+                </div>
+                
+                <div class="form-field">
+                    <label for="reviewVendor">Vendor</label>
+                    <input type="text" id="reviewVendor" placeholder="Vendor name">
+                </div>
+                
+                <div class="form-field">
+                    <label for="reviewCategory">Category</label>
+                    <select id="reviewCategory">
+                        <option value="">Select category...</option>
+                        {% for cat in categories %}
+                        <option value="{{ cat }}">{{ cat }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="ocr-text-preview">
+                    <label>Detected Text</label>
+                    <div id="ocrTextPreview" class="ocr-preview-box"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="modal-actions">
+            <button class="btn-secondary" id="skipReview">Skip & Fill Manually</button>
+            <button class="btn-primary" id="confirmReview">Confirm & Add</button>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
-    // Categories for JS
     const CATEGORIES = {{ categories|tojson }};
 </script>
 {% endblock %}
