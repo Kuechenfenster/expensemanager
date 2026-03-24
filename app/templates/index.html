@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <!-- Summary Cards -->
+    <section class="summary-section">
+        <div class="card summary-card total">
+            <i class="fas fa-wallet"></i>
+            <div class="summary-info">
+                <span class="label">Total Expenses</span>
+                <span class="value">${{ "%.2f"|format(total_amount) }}</span>
+            </div>
+        </div>
+        {% for category, amount in category_totals.items() if amount > 0 %}
+        <div class="card summary-card category">
+            <i class="fas fa-{% if category == 'Transport' %}car{% elif category == 'Meals' %}utensils{% elif category == 'Hotel' %}bed{% elif category == 'Mobile Phone' %}mobile-alt{% elif category == 'Office Supplies' %}paperclip{% elif category == 'Software' %}laptop-code{% else %}receipt{% endif %}"></i>
+            <div class="summary-info">
+                <span class="label">{{ category }}</span>
+                <span class="value">${{ "%.2f"|format(amount) }}</span>
+            </div>
+        </div>
+        {% endfor %}
+    </section>
+    
+    <!-- Add Expense Form -->
+    <section class="form-section">
+        <div class="card">
+            <h2><i class="fas fa-plus-circle"></i> Add New Expense</h2>
+            <form id="expenseForm" enctype="multipart/form-data">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="date">Date *</label>
+                        <input type="date" id="date" name="date" required value="{{ current_date }}">
+                    </div>
+                    <div class="form-group">
+                        <label for="amount">Amount *</label>
+                        <input type="number" id="amount" name="amount" step="0.01" min="0" required placeholder="0.00">
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="category">Category *</label>
+                        <select id="category" name="category" required>
+                            {% for cat in categories %}
+                            <option value="{{ cat }}">{{ cat }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="vendor">Vendor/Merchant</label>
+                        <input type="text" id="vendor" name="vendor" placeholder="e.g., Uber, Restaurant XYZ">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="description">Description</label>
+                    <textarea id="description" name="description" rows="2" placeholder="Additional details..."></textarea>
+                </div>
+                
+                <div class="form-group file-upload">
+                    <label for="invoice">
+                        <i class="fas fa-camera"></i>
+                        <span>Upload Invoice Photo (Optional)</span>
+                        <span class="file-name"></span>
+                    </label>
+                    <input type="file" id="invoice" name="invoice" accept="image/*,.pdf" capture="environment">
+                    <div id="ocr-status" class="ocr-status hidden"></div>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Save Expense
+                    </button>
+                </div>
+            </form>
+        </div>
+    </section>
+    
+    <!-- Expenses List -->
+    <section class="expenses-section">
+        <div class="card">
+            <h2><i class="fas fa-list"></i> Recent Expenses</h2>
+            <div class="expenses-list">
+                {% if expenses %}
+                <table class="expenses-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Category</th>
+                            <th>Vendor</th>
+                            <th>Description</th>
+                            <th>Amount</th>
+                            <th>Invoice</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for expense in expenses %}
+                        <tr data-id="{{ expense.id }}">
+                            <td>{{ expense.date.strftime('%Y-%m-%d') }}</td>
+                            <td>
+                                <span class="category-badge {{ expense.category|lower|replace(' ', '-') }}">
+                                    {{ expense.category }}
+                                </span>
+                            </td>
+                            <td>{{ expense.vendor or '-' }}</td>
+                            <td>{{ expense.description or '-' }}</td>
+                            <td class="amount">${{ "%.2f"|format(expense.amount) }}</td>
+                            <td>
+                                {% if expense.invoice_filename %}
+                                <a href="{{ url_for('uploaded_file', filename=expense.invoice_filename) }}" target="_blank" class="btn-icon">
+                                    <i class="fas fa-image"></i>
+                                </a>
+                                {% else %}
+                                <span class="no-invoice">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button class="btn-icon delete-btn" onclick="deleteExpense({{ expense.id }})">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state">
+                    <i class="fas fa-receipt"></i>
+                    <p>No expenses recorded yet. Add your first expense above!</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
