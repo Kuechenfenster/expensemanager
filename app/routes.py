@@ -124,7 +124,7 @@ def upload_invoice():
             'filename': filename,
             'extracted_data': {
                 'amount': ocr_result['amount'],
-                'date': ocr_result['date'].isoformat() if ocr_result['date'] else None,
+                'date': ocr_result['date'] if ocr_result['date'] else None,
                 'vendor': ocr_result['vendor'],
                 'raw_text': ocr_result['raw_text'][:500]  # Truncate for response
             }
