@@ -1,10 +1,12 @@
 # Use official Python image as base
 FROM python:3.11-slim-bookworm
 
-# Install system dependencies including Tesseract OCR
+# Install system dependencies including Tesseract OCR and Poppler for PDF support
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     libtesseract-dev \
+    poppler-utils \
+    libpoppler-cpp-dev \
     libjpeg-dev \
     zlib1g-dev \
     libpng-dev \

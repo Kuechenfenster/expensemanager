@@ -5,3 +5,4 @@ Pillow>=11.0.0
 pytesseract==0.3.10
 python-dateutil==2.8.2
 psycopg2-binary==2.9.9
+pdf2image==1.17.0
