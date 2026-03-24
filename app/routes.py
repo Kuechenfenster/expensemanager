@@ -1,6 +1,6 @@
 from flask import render_template, request, jsonify, send_from_directory
 from app import app, db
-from app.models import Expense, Category
+from app.models import Expense, Category, InvoicePattern, OCRExtraction
 from app.ocr import process_invoice
 from werkzeug.utils import secure_filename
 from datetime import datetime
@@ -13,38 +13,31 @@ def allowed_file(filename):
 
 @app.route('/')
 def index():
-    """Main expenses page"""
     expenses = Expense.query.order_by(Expense.date.desc()).all()
     categories = Category.get_default_categories()
     return render_template('index.html', expenses=expenses, categories=categories)
 
 @app.route('/analytics')
 def analytics():
-    """Analytics page with summary"""
     categories = Category.get_default_categories()
     expenses = Expense.query.all()
     
-    # Calculate stats
     total = sum(e.amount for e in expenses)
     count = len(expenses)
     by_category = {cat: sum(e.amount for e in expenses if e.category == cat) for cat in categories}
     
-    # Monthly breakdown
     monthly = {}
     for exp in expenses:
         month = exp.date.strftime('%Y-%m')
         monthly[month] = monthly.get(month, 0) + exp.amount
     
     return render_template('analytics.html', 
-                         total=total, 
-                         count=count, 
-                         by_category=by_category,
-                         monthly=monthly,
+                         total=total, count=count, 
+                         by_category=by_category, monthly=monthly,
                          categories=categories)
 
 @app.route('/api/expenses', methods=['GET'])
 def get_expenses():
-    """Get expenses with optional filters"""
     query = Expense.query
     category = request.args.get('category')
     month = request.args.get('month')
@@ -66,7 +59,6 @@ def get_expenses():
 
 @app.route('/api/expenses', methods=['POST'])
 def add_expense():
-    """Add new expense"""
     try:
         data = request.form
         
@@ -87,21 +79,46 @@ def add_expense():
                 filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
                 file.save(filepath)
                 expense.invoice_filename = filename
-                
-                ocr_result = process_invoice(filepath)
-                expense.ocr_text = ocr_result['raw_text']
-                if not expense.vendor and ocr_result['vendor']:
-                    expense.vendor = ocr_result['vendor']
         
         db.session.add(expense)
         db.session.commit()
+        
+        # Handle OCR correction data if provided
+        ocr_data = request.form.get('ocr_data')
+        if ocr_data:
+            ocr_info = json.loads(ocr_data)
+            ocr_extraction = OCRExtraction(
+                expense_id=expense.id,
+                original_amount=ocr_info.get('original_amount'),
+                corrected_amount=expense.amount,
+                original_date=ocr_info.get('original_date'),
+                corrected_date=expense.date.isoformat(),
+                original_vendor=ocr_info.get('original_vendor'),
+                corrected_vendor=expense.vendor,
+                full_text=ocr_info.get('full_text', ''),
+                was_corrected=ocr_info.get('was_corrected', False)
+            )
+            db.session.add(ocr_extraction)
+            
+            # Learn from corrections
+            if expense.vendor:
+                InvoicePattern.learn_pattern(
+                    expense.vendor, 'amount', expense.amount, 
+                    ocr_extraction.full_text
+                )
+                InvoicePattern.learn_pattern(
+                    expense.vendor, 'date', expense.date,
+                    ocr_extraction.full_text
+                )
+            
+            db.session.commit()
+        
         return jsonify({'success': True, 'expense': expense.to_dict()})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
 
 @app.route('/api/expenses/<int:id>', methods=['DELETE'])
 def delete_expense(id):
-    """Delete expense"""
     try:
         expense = Expense.query.get_or_404(id)
         if expense.invoice_filename:
@@ -116,7 +133,7 @@ def delete_expense(id):
 
 @app.route('/api/upload', methods=['POST'])
 def upload_invoice():
-    """Upload and process invoice with OCR"""
+    """Upload and process invoice - returns extracted data for review"""
     try:
         if 'invoice' not in request.files:
             return jsonify({'success': False, 'error': 'No file'}), 400
@@ -134,15 +151,26 @@ def upload_invoice():
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
         
+        # Process OCR
         ocr_result = process_invoice(filepath)
+        
+        # Try to improve with learned patterns if vendor detected
+        if ocr_result.get('vendor'):
+            patterns = InvoicePattern.get_patterns_for_vendor(ocr_result['vendor'])
+            for pattern in patterns:
+                if pattern.pattern_type == 'amount' and not ocr_result.get('amount'):
+                    # Could use patterns to improve detection
+                    pass
         
         return jsonify({
             'success': True,
             'filename': filename,
+            'filepath': filepath,
             'extracted_data': {
-                'amount': ocr_result['amount'],
-                'date': ocr_result['date'] if ocr_result['date'] else None,
-                'vendor': ocr_result['vendor']
+                'amount': ocr_result.get('amount'),
+                'date': ocr_result.get('date'),
+                'vendor': ocr_result.get('vendor'),
+                'raw_text': ocr_result.get('raw_text', '')[:1000]
             }
         })
     except Exception as e:
@@ -159,7 +187,6 @@ def get_categories():
 
 @app.route('/api/categories', methods=['POST'])
 def add_category():
-    """Add custom category"""
     try:
         data = request.get_json() or request.form
         name = data.get('name', '').strip()
@@ -176,7 +203,6 @@ def add_category():
 
 @app.route('/api/months')
 def get_months():
-    """Get months with expenses"""
     try:
         dates = db.session.query(Expense.date).distinct().all()
         months = sorted(set(d.strftime('%Y-%m') for (d,) in dates), reverse=True)
@@ -186,7 +212,6 @@ def get_months():
 
 @app.route('/api/summary')
 def get_summary():
-    """Get summary with filters"""
     query = Expense.query
     category = request.args.get('category')
     month = request.args.get('month')
@@ -214,9 +239,5 @@ def get_summary():
         month_key = exp.date.strftime('%Y-%m')
         monthly[month_key] = monthly.get(month_key, 0) + exp.amount
     
-    return jsonify({
-        'total': total,
-        'count': len(expenses),
-        'by_category': by_category,
-        'monthly': monthly
-    })
+    return jsonify({'total': total, 'count': len(expenses), 
+                    'by_category': by_category, 'monthly': monthly})
