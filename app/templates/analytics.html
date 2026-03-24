@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% set active_tab = 'analytics' %}
+
+{% block content %}
+<!-- Filters -->
+<section class="section">
+    <h1 class="section-title">Analytics</h1>
+    
+    <div class="filters">
+        <div class="filter-group">
+            <label for="monthFilter">Month</label>
+            <select id="monthFilter">
+                <option value="">All months</option>
+            </select>
+        </div>
+        
+        <div class="filter-group">
+            <label for="categoryFilter">Category</label>
+            <select id="categoryFilter">
+                <option value="">All categories</option>
+                {% for cat in categories %}
+                <option value="{{ cat }}">{{ cat }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <button class="btn-secondary" id="clearFilters">Reset</button>
+    </div>
+</section>
+
+<!-- Summary Cards -->
+<section class="section">
+    <div class="cards">
+        <div class="card card-total">
+            <div class="card-label">Total</div>
+            <div class="card-value" id="totalAmount">€{{ "%.2f" % total }}</div>
+            <div class="card-sub" id="expenseCount">{{ count }} expenses</div>
+        </div>
+        
+        {% for cat, amount in by_category.items() %}
+        {% if amount > 0 %}
+        <div class="card">
+            <div class="card-label">{{ cat }}</div>
+            <div class="card-value">€{{ "%.2f" % amount }}</div>
+            <div class="card-sub">{{ "%.1f" % ((amount / total * 100) if total > 0 else 0) }}%</div>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+</section>
+
+<!-- Monthly Breakdown -->
+<section class="section">
+    <h2 class="section-title">Monthly Breakdown</h2>
+    <div id="monthlyChart" class="chart">
+        {% for month, amount in monthly.items()|sort(reverse=true) %}
+        <div class="chart-bar">
+            <div class="bar-label">{{ month }}</div>
+            <div class="bar-track">
+                <div class="bar-fill" style="width: {{ (amount / monthly.values()|max * 100) if monthly.values()|max > 0 else 0 }}%"></div>
+            </div>
+            <div class="bar-value">€{{ "%.0f" % amount }}</div>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Pre-load data
+    const SUMMARY_DATA = {
+        total: {{ total }},
+        by_category: {{ by_category|tojson }},
+        monthly: {{ monthly|tojson }}
+    };
+</script>
+{% endblock %}
