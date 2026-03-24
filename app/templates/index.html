@@ -1,138 +1,222 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container">
-    <!-- Summary Cards -->
-    <section class="summary-section">
-        <div class="card summary-card total">
-            <i class="fas fa-wallet"></i>
-            <div class="summary-info">
-                <span class="label">Total Expenses</span>
-                <span class="value">${{ "%.2f"|format(total_amount) }}</span>
-            </div>
+<!-- Summary Section with Filters -->
+<div class="summary-section">
+    <div class="summary-header">
+        <h2>
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+            Summary Report
+        </h2>
+        
+        <!-- Filters -->
+        <div class="filters">
+            <select id="monthFilter" class="filter-select">
+                <option value="">All Months</option>
+            </select>
+            <select id="categoryFilter" class="filter-select">
+                <option value="">All Categories</option>
+                {% for cat in categories %}
+                <option value="{{ cat }}">{{ cat }}</option>
+                {% endfor %}
+            </select>
+            <button id="applyFilters" class="btn btn-secondary">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                Filter
+            </button>
+            <button id="clearFilters" class="btn btn-ghost">Clear</button>
         </div>
-        {% for category, amount in category_totals.items() if amount > 0 %}
-        <div class="card summary-card category">
-            <i class="fas fa-{% if category == 'Transport' %}car{% elif category == 'Meals' %}utensils{% elif category == 'Hotel' %}bed{% elif category == 'Mobile Phone' %}mobile-alt{% elif category == 'Office Supplies' %}paperclip{% elif category == 'Software' %}laptop-code{% else %}receipt{% endif %}"></i>
-            <div class="summary-info">
-                <span class="label">{{ category }}</span>
-                <span class="value">${{ "%.2f"|format(amount) }}</span>
-            </div>
+    </div>
+    
+    <div class="summary-cards">
+        <div class="summary-card total">
+            <div class="summary-label">Total Expenses</div>
+            <div class="summary-value" id="totalAmount">€{{ "%.2f" % total_amount }}</div>
+            <div class="summary-count" id="expenseCount">{{ expenses|length }} expenses</div>
+        </div>
+        
+        {% for cat in categories %}
+        <div class="summary-card category">
+            <div class="summary-label">{{ cat }}</div>
+            <div class="summary-value">€{{ "%.2f" % category_totals.get(cat, 0) }}</div>
         </div>
         {% endfor %}
-    </section>
+    </div>
+</div>
+
+<!-- Add Expense Form -->
+<div class="form-section">
+    <h2>
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        Add New Expense
+    </h2>
     
-    <!-- Add Expense Form -->
-    <section class="form-section">
-        <div class="card">
-            <h2><i class="fas fa-plus-circle"></i> Add New Expense</h2>
-            <form id="expenseForm" enctype="multipart/form-data">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="date">Date *</label>
-                        <input type="date" id="date" name="date" required value="{{ current_date }}">
-                    </div>
-                    <div class="form-group">
-                        <label for="amount">Amount *</label>
-                        <input type="number" id="amount" name="amount" step="0.01" min="0" required placeholder="0.00">
-                    </div>
-                </div>
-                
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="category">Category *</label>
-                        <select id="category" name="category" required>
-                            {% for cat in categories %}
-                            <option value="{{ cat }}">{{ cat }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="vendor">Vendor/Merchant</label>
-                        <input type="text" id="vendor" name="vendor" placeholder="e.g., Uber, Restaurant XYZ">
-                    </div>
-                </div>
-                
-                <div class="form-group">
-                    <label for="description">Description</label>
-                    <textarea id="description" name="description" rows="2" placeholder="Additional details..."></textarea>
-                </div>
-                
-                <div class="form-group file-upload">
-                    <label for="invoice">
-                        <i class="fas fa-camera"></i>
-                        <span>Upload Invoice Photo (Optional)</span>
-                        <span class="file-name"></span>
-                    </label>
-                    <input type="file" id="invoice" name="invoice" accept="image/*,.pdf" capture="environment">
-                    <div id="ocr-status" class="ocr-status hidden"></div>
-                </div>
-                
-                <div class="form-actions">
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-save"></i> Save Expense
+    <form id="expenseForm" enctype="multipart/form-data">
+        <div class="form-grid">
+            <div class="form-group required">
+                <label for="date">Date</label>
+                <input type="date" id="date" name="date" required 
+                       value="{{ current_date if current_date else '' }}">
+            </div>
+            
+            <div class="form-group required">
+                <label for="amount">Amount (€)</label>
+                <input type="number" id="amount" name="amount" step="0.01" min="0.01" 
+                       required placeholder="0.00">
+            </div>
+            
+            <div class="form-group required">
+                <label for="category">
+                    Category
+                    <button type="button" id="addCategoryBtn" class="btn-icon" title="Add new category">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                     </button>
-                </div>
-            </form>
-        </div>
-    </section>
-    
-    <!-- Expenses List -->
-    <section class="expenses-section">
-        <div class="card">
-            <h2><i class="fas fa-list"></i> Recent Expenses</h2>
-            <div class="expenses-list">
-                {% if expenses %}
-                <table class="expenses-table">
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Category</th>
-                            <th>Vendor</th>
-                            <th>Description</th>
-                            <th>Amount</th>
-                            <th>Invoice</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for expense in expenses %}
-                        <tr data-id="{{ expense.id }}">
-                            <td>{{ expense.date.strftime('%Y-%m-%d') }}</td>
-                            <td>
-                                <span class="category-badge {{ expense.category|lower|replace(' ', '-') }}">
-                                    {{ expense.category }}
-                                </span>
-                            </td>
-                            <td>{{ expense.vendor or '-' }}</td>
-                            <td>{{ expense.description or '-' }}</td>
-                            <td class="amount">${{ "%.2f"|format(expense.amount) }}</td>
-                            <td>
-                                {% if expense.invoice_filename %}
-                                <a href="{{ url_for('uploaded_file', filename=expense.invoice_filename) }}" target="_blank" class="btn-icon">
-                                    <i class="fas fa-image"></i>
-                                </a>
-                                {% else %}
-                                <span class="no-invoice">-</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <button class="btn-icon delete-btn" onclick="deleteExpense({{ expense.id }})">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-                {% else %}
-                <div class="empty-state">
-                    <i class="fas fa-receipt"></i>
-                    <p>No expenses recorded yet. Add your first expense above!</p>
-                </div>
-                {% endif %}
+                </label>
+                <select id="category" name="category" required>
+                    <option value="">Select category</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat }}">{{ cat }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="vendor">Vendor/Merchant</label>
+                <input type="text" id="vendor" name="vendor" 
+                       placeholder="e.g., Uber, Restaurant XYZ">
             </div>
         </div>
-    </section>
+        
+        <div class="form-group">
+            <label for="description">Description</label>
+            <textarea id="description" name="description" rows="2" 
+                      placeholder="Additional details..."></textarea>
+        </div>
+        
+        <!-- File Upload -->
+        <div class="upload-section">
+            <div class="upload-area" id="uploadArea">
+                <input type="file" id="invoice" name="invoice" accept="image/*,.pdf" 
+                       style="display: none;">
+                <div class="upload-placeholder">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                    <span>Upload Invoice Photo (Optional)</span>
+                    <small>Drag & drop or click to select</small>
+                </div>
+                <div class="upload-preview" id="uploadPreview">
+                    <img id="previewImage" src="" alt="Preview">
+                    <span id="previewName"></span>
+                    <button type="button" class="btn-remove" id="removeUpload">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </div>
+                <div class="upload-progress" id="uploadProgress">
+                    <div class="progress-bar"></div>
+                    <span>Processing with OCR...</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add Expense
+            </button>
+        </div>
+        
+        <div id="formMessage" class="form-message"></div>
+    </form>
 </div>
+
+<!-- Expenses List -->
+<div class="expenses-section">
+    <h2>
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        Recent Expenses
+    </h2>
+    
+    <div id="expensesList">
+        {% if expenses %}
+        <table class="expenses-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Category</th>
+                    <th>Vendor</th>
+                    <th>Description</th>
+                    <th>Amount</th>
+                    <th>Invoice</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for expense in expenses %}
+                <tr data-id="{{ expense.id }}">
+                    <td>{{ expense.date.strftime('%d.%m.%Y') }}</td>
+                    <td><span class="category-badge">{{ expense.category }}</span></td>
+                    <td>{{ expense.vendor or '-' }}</td>
+                    <td>{{ expense.description or '-' }}</td>
+                    <td class="amount">€{{ "%.2f" % expense.amount }}</td>
+                    <td>
+                        {% if expense.invoice_filename %}
+                        <a href="{{ url_for('uploaded_file', filename=expense.invoice_filename) }}" 
+                           target="_blank" class="btn-icon invoice-link">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                        </a>
+                        {% else %}
+                        <span class="no-invoice">-</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <button class="btn-delete delete-expense" data-id="{{ expense.id }}">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+            <p>No expenses recorded yet.</p>
+            <p>Add your first expense above!</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Category Modal -->
+<div id="categoryModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Add New Category</h3>
+            <button type="button" class="btn-close" id="closeModal">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label for="newCategoryName">Category Name</label>
+                <input type="text" id="newCategoryName" placeholder="e.g., Car Rental, Consulting">
+            </div>
+            <div id="categoryError" class="form-message error" style="display: none;"></div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-ghost" id="cancelCategory">Cancel</button>
+            <button type="button" class="btn btn-primary" id="saveCategory">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                Add Category
+            </button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Pass categories to JavaScript
+    const CATEGORIES = {{ categories|tojson }};
+</script>
 {% endblock %}
