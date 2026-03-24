@@ -5,6 +5,7 @@ from app.ocr import process_invoice
 from werkzeug.utils import secure_filename
 from datetime import datetime
 import os
+import json
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'bmp', 'tiff'}
 
@@ -70,6 +71,10 @@ def add_expense():
             vendor=data.get('vendor', '')
         )
         
+        # Handle invoice file or filename from form
+        invoice_filename = None
+        
+        # Check if new file uploaded
         if 'invoice' in request.files:
             file = request.files['invoice']
             if file and file.filename and allowed_file(file.filename):
@@ -78,7 +83,18 @@ def add_expense():
                 filename = timestamp + filename
                 filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
                 file.save(filepath)
-                expense.invoice_filename = filename
+                invoice_filename = filename
+        
+        # If no file uploaded, check for filename from review workflow
+        if not invoice_filename:
+            invoice_filename = request.form.get('invoice_filename')
+            # Verify the file actually exists
+            if invoice_filename:
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(invoice_filename))
+                if not os.path.exists(filepath):
+                    invoice_filename = None  # File doesn't exist, don't save reference
+        
+        expense.invoice_filename = invoice_filename
         
         db.session.add(expense)
         db.session.commit()
@@ -101,7 +117,7 @@ def add_expense():
             db.session.add(ocr_extraction)
             
             # Learn from corrections
-            if expense.vendor:
+            if expense.vendor and ocr_extraction.full_text:
                 InvoicePattern.learn_pattern(
                     expense.vendor, 'amount', expense.amount, 
                     ocr_extraction.full_text
@@ -115,6 +131,7 @@ def add_expense():
         
         return jsonify({'success': True, 'expense': expense.to_dict()})
     except Exception as e:
+        db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 400
 
 @app.route('/api/expenses/<int:id>', methods=['DELETE'])
@@ -122,13 +139,14 @@ def delete_expense(id):
     try:
         expense = Expense.query.get_or_404(id)
         if expense.invoice_filename:
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], expense.invoice_filename)
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(expense.invoice_filename))
             if os.path.exists(filepath):
                 os.remove(filepath)
         db.session.delete(expense)
         db.session.commit()
         return jsonify({'success': True})
     except Exception as e:
+        db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 400
 
 @app.route('/api/upload', methods=['POST'])
@@ -178,7 +196,9 @@ def upload_invoice():
 
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+    """Serve uploaded invoice files"""
+    safe_filename = secure_filename(filename)
+    return send_from_directory(app.config['UPLOAD_FOLDER'], safe_filename)
 
 @app.route('/api/categories', methods=['GET'])
 def get_categories():
