@@ -90,7 +90,7 @@ def add_expense():
             invoice_filename = request.form.get('invoice_filename')
             # Verify the file actually exists
             if invoice_filename:
-                filepath = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(invoice_filename))
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], invoice_filename)
                 if not os.path.exists(filepath):
                     invoice_filename = None  # File doesn't exist, don't save reference
         
