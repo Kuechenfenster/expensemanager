@@ -45,3 +45,6 @@ app/uploads/*
 
 # Agent Zero
 .a0proj/
+
+# Instance data
+instance/expenses.db
