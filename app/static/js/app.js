@@ -70,6 +70,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const formData = new FormData();
         formData.append('invoice', file);
         
+        console.log('Uploading file:', file.name);
+        
         fetch('/api/upload', {
             method: 'POST',
             body: formData
@@ -79,9 +81,10 @@ document.addEventListener('DOMContentLoaded', () => {
             uploadStatus.innerHTML = '';
             uploadStatus.className = 'upload-status';
             
+            console.log('Upload response:', data);
+            
             if (data.success) {
                 uploadedFilePath = data.filename;
-                invoiceFilenameInput.value = data.filename;
                 
                 // Store OCR data for review
                 currentOCRData = {
@@ -94,6 +97,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     original_vendor: data.extracted_data.vendor
                 };
                 
+                console.log('Stored OCR data:', currentOCRData);
+                
                 // Show review modal
                 openReviewModal(file, data.extracted_data);
             } else {
@@ -102,6 +107,7 @@ document.addEventListener('DOMContentLoaded', () => {
         })
         .catch(err => {
             uploadStatus.innerHTML = '';
+            console.error('Upload error:', err);
             showMessage('Error: ' + err.message, 'error');
         });
     }
@@ -128,9 +134,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Set category if vendor matches
         if (extractedData.vendor) {
-            // Try to find matching category based on vendor name
             const matchingCat = findCategoryForVendor(extractedData.vendor);
-            if (matchingCat) {
+            if (matchingCat && reviewCategory.querySelector(`option[value="${matchingCat}"]`)) {
                 reviewCategory.value = matchingCat;
             }
         }
@@ -165,11 +170,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     skipReviewBtn.addEventListener('click', () => {
+        // Still save the invoice filename even if skipped
+        if (currentOCRData && currentOCRData.filename) {
+            invoiceFilenameInput.value = currentOCRData.filename;
+            console.log('Invoice filename saved (skip):', invoiceFilenameInput.value);
+        }
         closeReviewModal();
         showMessage('Invoice saved. Fill in details manually.', 'info');
     });
     
     confirmReviewBtn.addEventListener('click', () => {
+        console.log('Confirm clicked, currentOCRData:', currentOCRData);
+        
         // Copy review data to main form
         amountInput.value = reviewAmount.value;
         dateInput.value = reviewDate.value;
@@ -178,40 +190,74 @@ document.addEventListener('DOMContentLoaded', () => {
             categorySelect.value = reviewCategory.value;
         }
         
-        // Prepare OCR correction data for learning
-        const wasCorrected = (
-            reviewAmount.value != currentOCRData.original_amount ||
-            reviewDate.value != currentOCRData.original_date ||
-            reviewVendor.value != currentOCRData.original_vendor
-        );
+        // CRITICAL: Save the filename to hidden field
+        if (currentOCRData && currentOCRData.filename) {
+            invoiceFilenameInput.value = currentOCRData.filename;
+            console.log('Invoice filename set:', invoiceFilenameInput.value);
+        }
         
-        ocrDataInput.value = JSON.stringify({
-            filename: currentOCRData.filename,
-            original_amount: currentOCRData.original_amount,
-            original_date: currentOCRData.original_date,
-            original_vendor: currentOCRData.original_vendor,
-            full_text: currentOCRData.full_text,
-            was_corrected: wasCorrected
-        });
+        // Prepare OCR correction data for learning
+        if (currentOCRData) {
+            const wasCorrected = (
+                reviewAmount.value != String(currentOCRData.original_amount) ||
+                reviewDate.value != String(currentOCRData.original_date) ||
+                reviewVendor.value != String(currentOCRData.original_vendor)
+            );
+            
+            const ocrData = {
+                filename: currentOCRData.filename,
+                original_amount: currentOCRData.original_amount,
+                original_date: currentOCRData.original_date,
+                original_vendor: currentOCRData.original_vendor,
+                full_text: currentOCRData.full_text,
+                was_corrected: wasCorrected
+            };
+            
+            ocrDataInput.value = JSON.stringify(ocrData);
+            console.log('OCR data set:', ocrDataInput.value);
+        }
         
         closeReviewModal();
         showMessage('Data confirmed. Click "Add Expense" to save.', 'success');
+        
+        // Auto-focus the Add button to guide user
+        form.querySelector('.btn-primary').focus();
     });
     
     // Form submission
     form.addEventListener('submit', (e) => {
         e.preventDefault();
         
+        console.log('Form submitting...');
+        console.log('Invoice filename:', invoiceFilenameInput.value);
+        console.log('OCR data:', ocrDataInput.value);
+        
         const btn = form.querySelector('.btn-primary');
         btn.disabled = true;
         btn.textContent = 'Adding...';
         
+        // Ensure all fields are included in FormData
+        const formData = new FormData();
+        formData.append('date', dateInput.value);
+        formData.append('amount', amountInput.value);
+        formData.append('category', categorySelect.value);
+        formData.append('vendor', vendorInput.value);
+        formData.append('description', document.getElementById('description').value);
+        formData.append('invoice_filename', invoiceFilenameInput.value);
+        formData.append('ocr_data', ocrDataInput.value);
+        
+        console.log('FormData entries:');
+        for (let [key, val] of formData.entries()) {
+            console.log(key, ':', val);
+        }
+        
         fetch('/api/expenses', {
             method: 'POST',
-            body: new FormData(form)
+            body: formData
         })
         .then(r => r.json())
         .then(data => {
+            console.log('Server response:', data);
             if (data.success) {
                 showMessage('Expense added!', 'success');
                 setTimeout(() => location.reload(), 500);
@@ -222,6 +268,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         })
         .catch(err => {
+            console.error('Submit error:', err);
             showMessage('Error: ' + err.message, 'error');
             btn.disabled = false;
             btn.textContent = 'Add Expense';
