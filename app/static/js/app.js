@@ -2,6 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Form elements
     const form = document.getElementById('expenseForm');
     const dateInput = document.getElementById('date');
+    const userSelect = document.getElementById('user');
     const currencyInput = document.getElementById('currency');
     const amountInput = document.getElementById('amount');
     const vendorInput = document.getElementById('vendor');
@@ -42,6 +43,19 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Initialize
     dateInput.value = new Date().toISOString().split('T')[0];
+
+    // Load saved user from sessionStorage (persists until browser close)
+    const savedUserId = sessionStorage.getItem('selectedUserId');
+    if (savedUserId && userSelect) {
+        userSelect.value = savedUserId;
+    }
+
+    // Save user selection when changed
+    if (userSelect) {
+        userSelect.addEventListener('change', () => {
+            sessionStorage.setItem('selectedUserId', userSelect.value);
+        });
+    }
     
     // Camera and file upload handlers
     cameraBtn.addEventListener('click', () => cameraInput.click());
@@ -231,6 +245,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const formData = new FormData();
         formData.append('date', dateInput.value);
+        formData.append('user_id', userSelect ? userSelect.value : '');
         formData.append('currency', currencyInput.value);
         formData.append('amount', amountInput.value);
         formData.append('category', categorySelect.value);

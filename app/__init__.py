@@ -21,65 +21,39 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 db = SQLAlchemy(app)
 
 # Import models before creating tables
-from app.models import Expense, Category, InvoicePattern, OCRExtraction
+from app.models import Expense, Category, User, InvoicePattern, OCRExtraction
 
 # Create all tables/columns on startup
 with app.app_context():
     db.create_all()  # Creates new tables and adds missing columns for SQLite
-    
+
     # Run migrations for PostgreSQL
     if 'postgresql' in str(app.config['SQLALCHEMY_DATABASE_URI']):
         from sqlalchemy import text
         try:
             # Add missing columns for PostgreSQL
             db.session.execute(text("""
-                ALTER TABLE expenses 
+                ALTER TABLE expenses
                 ADD COLUMN IF NOT EXISTS ocr_confidence FLOAT,
                 ADD COLUMN IF NOT EXISTS ocr_text TEXT,
-                ADD COLUMN IF NOT EXISTS currency VARCHAR(3) DEFAULT 'EUR'
+                ADD COLUMN IF NOT EXISTS currency VARCHAR(3) DEFAULT 'HKD',
+                ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)
             """))
-            
-            # Ensure new tables exist
+
+            # Create users table if not exists
             db.session.execute(text("""
-                CREATE TABLE IF NOT EXISTS invoice_patterns (
+                CREATE TABLE IF NOT EXISTS users (
                     id SERIAL PRIMARY KEY,
-                    vendor_name VARCHAR(100),
-                    pattern_type VARCHAR(20),
-                    pattern_text TEXT,
-                    context_before VARCHAR(200),
-                    context_after VARCHAR(200),
-                    success_count INTEGER DEFAULT 1,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    last_used TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """))
-            
-            db.session.execute(text("""
-                CREATE TABLE IF NOT EXISTS ocr_extractions (
-                    id SERIAL PRIMARY KEY,
-                    expense_id INTEGER REFERENCES expenses(id),
-                    original_amount FLOAT,
-                    corrected_amount FLOAT,
-                    original_date VARCHAR(20),
-                    corrected_date VARCHAR(20),
-                    original_vendor VARCHAR(100),
-                    corrected_vendor VARCHAR(100),
-                    full_text TEXT,
-                    confidence_score FLOAT,
-                    was_corrected BOOLEAN DEFAULT FALSE,
+                    name VARCHAR(50) NOT NULL UNIQUE,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """))
-            
+
             db.session.commit()
             print("✅ Database schema updated")
         except Exception as e:
-            db.session.rollback()
             print(f"Migration note: {e}")
-    
-    # Initialize default categories
-    from app.models import Category
-    Category.get_default_categories()
+            db.session.rollback()
 
-# Import routes at end to avoid circular imports
+# Import routes after app and db are initialized
 from app import routes

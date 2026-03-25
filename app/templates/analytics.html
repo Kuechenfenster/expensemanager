@@ -5,7 +5,7 @@
 <!-- Filters -->
 <section class="section">
     <h1 class="section-title">Analytics</h1>
-
+    
     <div class="filters">
         <div class="filter-group">
             <label for="monthFilter">Month</label>
@@ -13,7 +13,7 @@
                 <option value="">All months</option>
             </select>
         </div>
-
+        
         <div class="filter-group">
             <label for="categoryFilter">Category</label>
             <select id="categoryFilter">
@@ -23,7 +23,17 @@
                 {% endfor %}
             </select>
         </div>
-
+        
+        <div class="filter-group">
+            <label for="userFilter">User</label>
+            <select id="userFilter">
+                <option value="">All users</option>
+                {% for name, data in by_user.items() %}
+                <option value="{{ name }}">{{ name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        
         <button class="btn-secondary" id="clearFilters">Reset</button>
     </div>
 </section>
@@ -37,23 +47,24 @@
             <div class="card card-total">
                 <div class="card-label">Total ({{ currency }})</div>
                 <div class="card-value" id="totalAmount">{{ currencies.get(currency, {}).get('symbol', currency) }}{{ "%.2f" % amount }}</div>
-                <div class="card-sub" id="expenseCount">{{ count if count else expenses|length }} expenses</div>
+                <div class="card-sub" id="expenseCount">{{ count if count else 0 }} expenses</div>
             </div>
             {% endfor %}
         {% else %}
             <div class="card card-total">
                 <div class="card-label">Total</div>
-                <div class="card-value" id="totalAmount">{{ currencies.get('EUR', {}).get('symbol', '€') }}0.00</div>
+                <div class="card-value" id="totalAmount">{{ currencies.get('HKD', {}).get('symbol', 'HK$') }}0.00</div>
                 <div class="card-sub" id="expenseCount">0 expenses</div>
             </div>
         {% endif %}
-
+        
         {% for cat, data in by_category.items() %}
         {% if data.amount > 0 %}
         {% set cat_currency = data.currency %}
         {% set cat_total = totals_by_currency.get(cat_currency, 0) %}
-        <div class="card">
-            <div class="card-label">{{ cat }}</div>
+        {% set color = category_colors.get(cat, '#3498db') %}
+        <div class="card" style="border-left: 4px solid {{ color }}">
+            <div class="card-label" style="color: {{ color }}">{{ cat }}</div>
             <div class="card-value">{{ currencies.get(cat_currency, {}).get('symbol', cat_currency) }}{{ "%.2f" % data.amount }}</div>
             <div class="card-sub">{{ data.count }} expenses | {{ "%.1f" % ((data.amount / cat_total * 100) if cat_total > 0 else 0) }}%</div>
         </div>
@@ -61,6 +72,24 @@
         {% endfor %}
     </div>
 </section>
+
+<!-- User Breakdown -->
+{% if by_user %}
+<section class="section">
+    <h2 class="section-title">By User</h2>
+    <div class="cards user-cards">
+        {% for name, data in by_user.items() %}
+        {% if data.count > 0 %}
+        <div class="card">
+            <div class="card-label">{{ name }}</div>
+            <div class="card-value">{{ currencies.get(data.currency, {}).get('symbol', data.currency) }}{{ "%.2f" % data.total }}</div>
+            <div class="card-sub">{{ data.count }} expenses</div>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
 
 <!-- Monthly Breakdown -->
 <section class="section">
@@ -94,8 +123,10 @@
     const SUMMARY_DATA = {
         totals_by_currency: {{ totals_by_currency|tojson }},
         by_category: {{ by_category|tojson }},
+        by_user: {{ by_user|tojson }},
         monthly: {{ monthly|tojson }},
-        currencies: {{ currencies|tojson }}
+        currencies: {{ currencies|tojson }},
+        category_colors: {{ category_colors|tojson }}
     };
 </script>
 {% endblock %}

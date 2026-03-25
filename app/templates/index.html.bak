@@ -2,45 +2,39 @@
 {% set active_tab = 'expenses' %}
 
 {% block content %}
-<!-- Expense Form -->
 <section class="section">
+    <h1 class="section-title">Add Expense</h1>
+    
     <form id="expenseForm" class="expense-form" enctype="multipart/form-data">
         <div class="form-row">
             <div class="form-field">
-                <label for="date">Date *</label>
+                <label for="date">Date</label>
                 <input type="date" id="date" name="date" required>
-            </div>
-            
-            <div class="form-field">
-                <label for="user">User</label>
-                <select id="user" name="user_id">
-                    {% for user in users %}
-                    <option value="{{ user.id }}">{{ user.name }}</option>
-                    {% endfor %}
-                </select>
             </div>
             
             <div class="form-field">
                 <label for="currency">Currency</label>
                 <select id="currency" name="currency" required>
                     {% for code, info in currencies.items() %}
-                    <option value="{{ code }}" {% if code == 'HKD' %}selected{% endif %}>
-                        {{ info.symbol }} {{ code }}
+                    <option value="{{ code }}" {% if code == 'EUR' %}selected{% endif %}>
+                        {{ info.symbol }} {{ code }} - {{ info.name }}
                     </option>
                     {% endfor %}
                 </select>
             </div>
             
             <div class="form-field">
-                <label for="amount">Amount *</label>
+                <label for="amount">Amount</label>
                 <input type="number" id="amount" name="amount" step="0.01" min="0.01" placeholder="0.00" required>
             </div>
             
             <div class="form-field category-field">
-                <label for="category">Category *
+                <label for="category">
+                    Category
                     <button type="button" id="addCategoryBtn" class="btn-small" title="Add category">+</button>
                 </label>
                 <select id="category" name="category" required>
+                    <option value="">Select...</option>
                     {% for cat in categories %}
                     <option value="{{ cat }}">{{ cat }}</option>
                     {% endfor %}
@@ -65,77 +59,87 @@
             </div>
         </div>
         
-        <!-- File Upload -->
-        <div class="form-row upload-row">
+        <!-- Camera/File Upload -->
+        <div class="upload-section">
             <div class="upload-buttons">
                 <button type="button" class="upload-btn" id="cameraBtn">
-                    <span class="upload-icon">📷</span>
-                    <span class="upload-text">Take Photo</span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                        <circle cx="12" cy="13" r="4"/>
+                    </svg>
+                    Take Photo
                 </button>
                 <button type="button" class="upload-btn" id="fileBtn">
-                    <span class="upload-icon">📤</span>
-                    <span class="upload-text">Upload File</span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                    Upload File
                 </button>
             </div>
             <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
             <input type="file" id="fileInput" accept="image/*,.pdf" hidden>
             <input type="hidden" id="invoiceFilename" name="invoice_filename">
             <input type="hidden" id="ocrData" name="ocr_data">
+            <div id="uploadStatus" class="upload-status"></div>
         </div>
         
         <div id="formMessage" class="message" style="display: none;"></div>
     </form>
 </section>
 
-<!-- Expenses List -->
 <section class="section">
-    <h2 class="section-title">Recent Expenses</h2>
-    
-    <div class="expense-table-container">
-        <table class="expense-table" id="expensesTable">
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>User</th>
-                    <th>Category</th>
-                    <th>Vendor</th>
-                    <th>Description</th>
-                    <th>Amount</th>
-                    <th>Invoice</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for expense in expenses %}
-                <tr data-id="{{ expense.id }}">
-                    <td>{{ expense.date.strftime('%Y-%m-%d') }}</td>
-                    <td>{{ expense.user.name if expense.user else '-' }}</td>
-                    <td><span class="category-badge">{{ expense.category }}</span></td>
-                    <td>{{ expense.vendor or '-' }}</td>
-                    <td>{{ expense.description or '-' }}</td>
-                    <td class="amount">{{ currencies.get(expense.currency, {}).get('symbol', expense.currency) }}{{ "%.2f" % expense.amount }}</td>
-                    <td>
-                        {% if expense.invoice_filename %}
-                        <a href="/uploads/{{ expense.invoice_filename }}" target="_blank" class="invoice-link" title="View invoice">📎</a>
-                        {% else %}
-                        <span class="no-invoice">-</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <button class="btn-icon delete-btn" data-id="{{ expense.id }}" title="Delete">🗑️</button>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <div class="section-header">
+        <h2 class="section-title">Recent Expenses</h2>
+        <span class="count">{{ expenses|length }} items</span>
     </div>
+    
+    {% if expenses %}
+    <table class="expense-table">
+        <thead>
+            <tr>
+                <th class="col-date">Date</th>
+                <th class="col-category">Category</th>
+                <th class="col-vendor">Vendor</th>
+                <th class="col-desc">Description</th>
+                <th class="col-amount">Amount</th>
+                <th class="col-actions"></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for expense in expenses %}
+            <tr data-id="{{ expense.id }}">
+                <td class="col-date">{{ expense.date.strftime('%d.%m.%Y') }}</td>
+                <td class="col-category"><span class="tag">{{ expense.category }}</span></td>
+                <td class="col-vendor">{{ expense.vendor or '—' }}</td>
+                <td class="col-desc">{{ expense.description or '—' }}</td>
+                <td class="col-amount">
+                    {{ expense.get_currency_symbol() }}{{ "%.2f" % expense.amount }}
+                </td>
+                <td class="col-actions">
+                    {% if expense.invoice_filename %}
+                    <a href="{{ url_for('uploaded_file', filename=expense.invoice_filename) }}" target="_blank" class="btn-icon" title="View invoice">📄</a>
+                    {% endif %}
+                    <button class="btn-icon delete-btn" data-id="{{ expense.id }}" title="Delete">🗑️</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        <p>No expenses yet. Add your first one above!</p>
+    </div>
+    {% endif %}
 </section>
 
-<!-- Add Category Modal -->
-<div id="categoryModal" class="modal" style="display: none;">
-    <div class="modal-content">
-        <h3>Add New Category</h3>
+<!-- Category Modal -->
+<div id="categoryModal" class="modal">
+    <div class="modal-box">
+        <h3>New Category</h3>
         <input type="text" id="newCategoryName" placeholder="e.g., Car Rental">
+        <div id="categoryError" class="error-text"></div>
         <div class="modal-actions">
             <button class="btn-secondary" id="cancelCategory">Cancel</button>
             <button class="btn-primary" id="saveCategory">Add</button>
@@ -144,30 +148,31 @@
 </div>
 
 <!-- Invoice Review Modal -->
-<div id="reviewModal" class="modal" style="display: none;">
-    <div class="modal-content modal-large">
+<div id="reviewModal" class="modal">
+    <div class="modal-box modal-large">
         <h3>Review Invoice Data</h3>
         <p class="modal-subtitle">Please verify and correct the extracted information</p>
         
-        <div class="review-container">
+        <div class="review-content">
             <div class="review-preview">
-                <img id="reviewImage" src="" alt="Invoice preview" style="max-width: 100%; display: none;">
-                <div id="reviewFileInfo" style="display: none;"></div>
+                <img id="reviewImage" src="" alt="Invoice preview">
             </div>
             
-            <div class="review-form">
-                <div class="form-field">
-                    <label for="reviewAmount">Amount</label>
-                    <input type="number" id="reviewAmount" step="0.01">
-                </div>
-                
+            <div class="review-fields">
                 <div class="form-field">
                     <label for="reviewCurrency">Currency</label>
                     <select id="reviewCurrency">
                         {% for code, info in currencies.items() %}
-                        <option value="{{ code }}">{{ info.symbol }} {{ code }}</option>
+                        <option value="{{ code }}" {% if code == 'EUR' %}selected{% endif %}>
+                            {{ info.symbol }} {{ code }}
+                        </option>
                         {% endfor %}
                     </select>
+                </div>
+                
+                <div class="form-field">
+                    <label for="reviewAmount">Amount</label>
+                    <input type="number" id="reviewAmount" step="0.01" placeholder="0.00">
                 </div>
                 
                 <div class="form-field">
@@ -177,37 +182,37 @@
                 
                 <div class="form-field">
                     <label for="reviewVendor">Vendor</label>
-                    <input type="text" id="reviewVendor">
+                    <input type="text" id="reviewVendor" placeholder="Vendor name">
                 </div>
                 
                 <div class="form-field">
                     <label for="reviewCategory">Category</label>
                     <select id="reviewCategory">
+                        <option value="">Select category...</option>
                         {% for cat in categories %}
                         <option value="{{ cat }}">{{ cat }}</option>
                         {% endfor %}
                     </select>
                 </div>
                 
-                <div class="form-field">
+                <div class="ocr-text-preview">
                     <label>Detected Text</label>
-                    <pre id="reviewOcrText" class="ocr-text-preview"></pre>
+                    <div id="ocrTextPreview" class="ocr-preview-box"></div>
                 </div>
             </div>
         </div>
         
         <div class="modal-actions">
-            <button class="btn-secondary" id="skipReview">Skip</button>
-            <button class="btn-primary" id="confirmReview">Confirm & Fill Form</button>
+            <button class="btn-secondary" id="skipReview">Skip & Fill Manually</button>
+            <button class="btn-primary" id="confirmReview">Confirm & Add</button>
         </div>
     </div>
 </div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
-    // Pass server data to JavaScript
-    const USERS = {{ users|tojson }};
     const CURRENCIES = {{ currencies|tojson }};
     const CATEGORIES = {{ categories|tojson }};
 </script>
