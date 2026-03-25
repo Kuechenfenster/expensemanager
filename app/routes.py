@@ -1,6 +1,6 @@
 from flask import render_template, request, jsonify, send_from_directory
 from app import app, db
-from app.models import Expense, Category, InvoicePattern, OCRExtraction
+from app.models import Expense, Category, InvoicePattern, OCRExtraction, CURRENCIES
 from app.ocr import process_invoice
 from werkzeug.utils import secure_filename
 from datetime import datetime
@@ -16,25 +16,41 @@ def allowed_file(filename):
 def index():
     expenses = Expense.query.order_by(Expense.date.desc()).all()
     categories = Category.get_default_categories()
-    return render_template('index.html', expenses=expenses, categories=categories)
+    return render_template('index.html', expenses=expenses, categories=categories, currencies=CURRENCIES)
 
 @app.route('/analytics')
 def analytics():
     categories = Category.get_default_categories()
     expenses = Expense.query.all()
     
-    total = sum(e.amount for e in expenses)
-    count = len(expenses)
-    by_category = {cat: sum(e.amount for e in expenses if e.category == cat) for cat in categories}
+    # Calculate totals by currency
+    totals_by_currency = {}
+    for exp in expenses:
+        curr = exp.currency
+        totals_by_currency[curr] = totals_by_currency.get(curr, 0) + exp.amount
+    
+    by_category = {}
+    for cat in categories:
+        cat_expenses = [e for e in expenses if e.category == cat]
+        by_category[cat] = {
+            'amount': sum(e.amount for e in cat_expenses),
+            'currency': cat_expenses[0].currency if cat_expenses else 'EUR',
+            'count': len(cat_expenses)
+        }
     
     monthly = {}
     for exp in expenses:
         month = exp.date.strftime('%Y-%m')
-        monthly[month] = monthly.get(month, 0) + exp.amount
+        if month not in monthly:
+            monthly[month] = {}
+        monthly[month][exp.currency] = monthly[month].get(exp.currency, 0) + exp.amount
     
     return render_template('analytics.html', 
-                         total=total, count=count, 
-                         by_category=by_category, monthly=monthly,
+                         expenses=expenses,
+                         currencies=CURRENCIES,
+                         totals_by_currency=totals_by_currency,
+                         by_category=by_category, 
+                         monthly=monthly,
                          categories=categories)
 
 @app.route('/api/expenses', methods=['GET'])
@@ -66,6 +82,7 @@ def add_expense():
         expense = Expense(
             date=datetime.strptime(data['date'], '%Y-%m-%d').date(),
             amount=float(data['amount']),
+            currency=data.get('currency', 'EUR'),  # NEW: Get currency from form
             category=data['category'],
             description=data.get('description', ''),
             vendor=data.get('vendor', '')
@@ -74,7 +91,6 @@ def add_expense():
         # Handle invoice file or filename from form
         invoice_filename = None
         
-        # Check if new file uploaded
         if 'invoice' in request.files:
             file = request.files['invoice']
             if file and file.filename and allowed_file(file.filename):
@@ -85,14 +101,12 @@ def add_expense():
                 file.save(filepath)
                 invoice_filename = filename
         
-        # If no file uploaded, check for filename from review workflow
         if not invoice_filename:
             invoice_filename = request.form.get('invoice_filename')
-            # Verify the file actually exists
             if invoice_filename:
                 filepath = os.path.join(app.config['UPLOAD_FOLDER'], invoice_filename)
                 if not os.path.exists(filepath):
-                    invoice_filename = None  # File doesn't exist, don't save reference
+                    invoice_filename = None
         
         expense.invoice_filename = invoice_filename
         
@@ -116,7 +130,6 @@ def add_expense():
             )
             db.session.add(ocr_extraction)
             
-            # Learn from corrections
             if expense.vendor and ocr_extraction.full_text:
                 InvoicePattern.learn_pattern(
                     expense.vendor, 'amount', expense.amount, 
@@ -177,7 +190,6 @@ def upload_invoice():
             patterns = InvoicePattern.get_patterns_for_vendor(ocr_result['vendor'])
             for pattern in patterns:
                 if pattern.pattern_type == 'amount' and not ocr_result.get('amount'):
-                    # Could use patterns to improve detection
                     pass
         
         return jsonify({
@@ -251,13 +263,21 @@ def get_summary():
     expenses = query.all()
     categories = Category.get_default_categories()
     
-    total = sum(e.amount for e in expenses)
-    by_category = {cat: sum(e.amount for e in expenses if e.category == cat) for cat in categories}
-    
-    monthly = {}
+    # Group by currency
+    by_currency = {}
     for exp in expenses:
-        month_key = exp.date.strftime('%Y-%m')
-        monthly[month_key] = monthly.get(month_key, 0) + exp.amount
+        curr = exp.currency
+        if curr not in by_currency:
+            by_currency[curr] = {'total': 0, 'by_category': {cat: 0 for cat in categories}}
+        by_currency[curr]['total'] += exp.amount
+        by_currency[curr]['by_category'][exp.category] += exp.amount
     
-    return jsonify({'total': total, 'count': len(expenses), 
-                    'by_category': by_category, 'monthly': monthly})
+    return jsonify({
+        'by_currency': by_currency,
+        'count': len(expenses)
+    })
+
+@app.route('/api/currencies')
+def get_currencies():
+    """Get available currencies"""
+    return jsonify({'success': True, 'currencies': CURRENCIES})

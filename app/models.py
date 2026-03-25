@@ -2,18 +2,29 @@ from app import db
 from datetime import datetime
 import json
 
+# Currency configuration
+CURRENCIES = {
+    'EUR': {'symbol': '€', 'name': 'Euro'},
+    'USD': {'symbol': '$', 'name': 'US Dollar'},
+    'HKD': {'symbol': 'HK$', 'name': 'Hong Kong Dollar'},
+    'CNY': {'symbol': '¥', 'name': 'Chinese Yuan (RMB)'},
+    'NZD': {'symbol': 'NZ$', 'name': 'New Zealand Dollar'},
+    'AUD': {'symbol': 'A$', 'name': 'Australian Dollar'}
+}
+
 class Expense(db.Model):
     __tablename__ = 'expenses'
     
     id = db.Column(db.Integer, primary_key=True)
     date = db.Column(db.Date, nullable=False)
     amount = db.Column(db.Float, nullable=False)
+    currency = db.Column(db.String(3), default='EUR', nullable=False)  # NEW: Currency code
     category = db.Column(db.String(50), nullable=False)
     description = db.Column(db.Text)
     vendor = db.Column(db.String(100))
     invoice_filename = db.Column(db.String(255))
     ocr_text = db.Column(db.Text)
-    ocr_confidence = db.Column(db.Float)  # Store OCR confidence score
+    ocr_confidence = db.Column(db.Float)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def to_dict(self):
@@ -21,12 +32,17 @@ class Expense(db.Model):
             'id': self.id,
             'date': self.date.isoformat() if self.date else None,
             'amount': self.amount,
+            'currency': self.currency,
             'category': self.category,
             'description': self.description,
             'vendor': self.vendor,
             'invoice_filename': self.invoice_filename,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
+    
+    def get_currency_symbol(self):
+        """Get the currency symbol for display"""
+        return CURRENCIES.get(self.currency, CURRENCIES['EUR'])['symbol']
 
 class Category(db.Model):
     __tablename__ = 'categories'
@@ -73,19 +89,18 @@ class InvoicePattern(db.Model):
     __tablename__ = 'invoice_patterns'
     
     id = db.Column(db.Integer, primary_key=True)
-    vendor_name = db.Column(db.String(100), index=True)  # Normalized vendor name
-    pattern_type = db.Column(db.String(20))  # 'amount', 'date', 'vendor'
-    pattern_text = db.Column(db.Text)  # The text pattern found
-    context_before = db.Column(db.String(200))  # Text before the value
-    context_after = db.Column(db.String(200))  # Text after the value
-    success_count = db.Column(db.Integer, default=1)  # How many times this pattern worked
+    vendor_name = db.Column(db.String(100), index=True)
+    pattern_type = db.Column(db.String(20))
+    pattern_text = db.Column(db.Text)
+    context_before = db.Column(db.String(200))
+    context_after = db.Column(db.String(200))
+    success_count = db.Column(db.Integer, default=1)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_used = db.Column(db.DateTime, default=datetime.utcnow)
     
     @staticmethod
     def learn_pattern(vendor, pattern_type, value, full_text):
         """Learn from corrected invoice data"""
-        # Find context around the value
         value_pos = full_text.lower().find(str(value).lower())
         if value_pos == -1:
             return
@@ -93,10 +108,8 @@ class InvoicePattern(db.Model):
         context_before = full_text[max(0, value_pos-50):value_pos].strip()
         context_after = full_text[value_pos+len(str(value)):value_pos+len(str(value))+50].strip()
         
-        # Normalize vendor name
         vendor_key = vendor.lower().strip() if vendor else 'unknown'
         
-        # Check if similar pattern exists
         existing = InvoicePattern.query.filter_by(
             vendor_name=vendor_key,
             pattern_type=pattern_type
@@ -119,7 +132,6 @@ class InvoicePattern(db.Model):
     
     @staticmethod
     def get_patterns_for_vendor(vendor):
-        """Get learned patterns for a vendor"""
         if not vendor:
             return []
         vendor_key = vendor.lower().strip()
@@ -139,7 +151,7 @@ class OCRExtraction(db.Model):
     corrected_date = db.Column(db.String(20))
     original_vendor = db.Column(db.String(100))
     corrected_vendor = db.Column(db.String(100))
-    full_text = db.Column(db.Text)  # Full OCR text
+    full_text = db.Column(db.Text)
     confidence_score = db.Column(db.Float)
     was_corrected = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

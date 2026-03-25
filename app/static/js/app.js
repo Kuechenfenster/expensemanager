@@ -2,6 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Form elements
     const form = document.getElementById('expenseForm');
     const dateInput = document.getElementById('date');
+    const currencyInput = document.getElementById('currency');
     const amountInput = document.getElementById('amount');
     const vendorInput = document.getElementById('vendor');
     const categorySelect = document.getElementById('category');
@@ -27,6 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Review modal
     const reviewModal = document.getElementById('reviewModal');
     const reviewImage = document.getElementById('reviewImage');
+    const reviewCurrency = document.getElementById('reviewCurrency');
     const reviewAmount = document.getElementById('reviewAmount');
     const reviewDate = document.getElementById('reviewDate');
     const reviewVendor = document.getElementById('reviewVendor');
@@ -35,7 +37,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const skipReviewBtn = document.getElementById('skipReview');
     const confirmReviewBtn = document.getElementById('confirmReview');
     
-    // Current OCR data for learning
     let currentOCRData = null;
     let uploadedFilePath = null;
     
@@ -70,8 +71,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const formData = new FormData();
         formData.append('invoice', file);
         
-        console.log('Uploading file:', file.name);
-        
         fetch('/api/upload', {
             method: 'POST',
             body: formData
@@ -81,12 +80,9 @@ document.addEventListener('DOMContentLoaded', () => {
             uploadStatus.innerHTML = '';
             uploadStatus.className = 'upload-status';
             
-            console.log('Upload response:', data);
-            
             if (data.success) {
                 uploadedFilePath = data.filename;
                 
-                // Store OCR data for review
                 currentOCRData = {
                     filename: data.filename,
                     filepath: data.filepath,
@@ -97,9 +93,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     original_vendor: data.extracted_data.vendor
                 };
                 
-                console.log('Stored OCR data:', currentOCRData);
+                // Try to detect currency from vendor/amount context
+                detectCurrency(data.extracted_data.raw_text);
                 
-                // Show review modal
                 openReviewModal(file, data.extracted_data);
             } else {
                 showMessage(data.error || 'Failed to process invoice', 'error');
@@ -107,13 +103,34 @@ document.addEventListener('DOMContentLoaded', () => {
         })
         .catch(err => {
             uploadStatus.innerHTML = '';
-            console.error('Upload error:', err);
             showMessage('Error: ' + err.message, 'error');
         });
     }
     
+    function detectCurrency(text) {
+        if (!text) return;
+        const textLower = text.toLowerCase();
+        
+        // Currency detection based on text patterns
+        const currencyPatterns = {
+            'HKD': ['hk$', 'hkd', 'hong kong dollar'],
+            'CNY': ['cny', 'rmb', 'yuan', '¥', '元'],
+            'USD': ['usd', 'us$', 'dollar'],
+            'NZD': ['nz$', 'nzd', 'new zealand'],
+            'AUD': ['a$', 'aud', 'australian'],
+            'EUR': ['eur', '€', 'euro']
+        };
+        
+        for (const [code, patterns] of Object.entries(currencyPatterns)) {
+            if (patterns.some(p => textLower.includes(p))) {
+                if (reviewCurrency) reviewCurrency.value = code;
+                return code;
+            }
+        }
+        return 'EUR'; // Default
+    }
+    
     function openReviewModal(file, extractedData) {
-        // Show image preview
         if (file.type.startsWith('image/')) {
             const reader = new FileReader();
             reader.onload = (e) => {
@@ -127,12 +144,10 @@ document.addEventListener('DOMContentLoaded', () => {
             reviewImage.parentElement.innerHTML = '<p style="color: var(--text-light)">📄 PDF uploaded</p>';
         }
         
-        // Populate extracted data
         reviewAmount.value = extractedData.amount ? extractedData.amount.toFixed(2) : '';
         reviewDate.value = extractedData.date || '';
         reviewVendor.value = extractedData.vendor || '';
         
-        // Set category if vendor matches
         if (extractedData.vendor) {
             const matchingCat = findCategoryForVendor(extractedData.vendor);
             if (matchingCat && reviewCategory.querySelector(`option[value="${matchingCat}"]`)) {
@@ -140,23 +155,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
-        // Show OCR text preview
         ocrTextPreview.textContent = extractedData.raw_text || 'No text detected';
-        
         reviewModal.classList.add('active');
     }
     
     function findCategoryForVendor(vendor) {
         const vendorLower = vendor.toLowerCase();
         const mappings = {
-            'uber': 'Transport',
-            'taxi': 'Transport',
-            'train': 'Transport',
-            'flight': 'Transport',
+            'uber': 'Transport', 'taxi': 'Transport', 'train': 'Transport', 'flight': 'Transport',
             'hotel': 'Hotel',
-            'restaurant': 'Meals',
-            'cafe': 'Meals',
-            'coffee': 'Meals'
+            'restaurant': 'Meals', 'cafe': 'Meals', 'coffee': 'Meals'
         };
         
         for (const [key, cat] of Object.entries(mappings)) {
@@ -170,19 +178,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     skipReviewBtn.addEventListener('click', () => {
-        // Still save the invoice filename even if skipped
         if (currentOCRData && currentOCRData.filename) {
             invoiceFilenameInput.value = currentOCRData.filename;
-            console.log('Invoice filename saved (skip):', invoiceFilenameInput.value);
         }
         closeReviewModal();
         showMessage('Invoice saved. Fill in details manually.', 'info');
     });
     
     confirmReviewBtn.addEventListener('click', () => {
-        console.log('Confirm clicked, currentOCRData:', currentOCRData);
-        
         // Copy review data to main form
+        currencyInput.value = reviewCurrency.value;
         amountInput.value = reviewAmount.value;
         dateInput.value = reviewDate.value;
         vendorInput.value = reviewVendor.value;
@@ -190,13 +195,10 @@ document.addEventListener('DOMContentLoaded', () => {
             categorySelect.value = reviewCategory.value;
         }
         
-        // CRITICAL: Save the filename to hidden field
         if (currentOCRData && currentOCRData.filename) {
             invoiceFilenameInput.value = currentOCRData.filename;
-            console.log('Invoice filename set:', invoiceFilenameInput.value);
         }
         
-        // Prepare OCR correction data for learning
         if (currentOCRData) {
             const wasCorrected = (
                 reviewAmount.value != String(currentOCRData.original_amount) ||
@@ -204,23 +206,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 reviewVendor.value != String(currentOCRData.original_vendor)
             );
             
-            const ocrData = {
+            ocrDataInput.value = JSON.stringify({
                 filename: currentOCRData.filename,
                 original_amount: currentOCRData.original_amount,
                 original_date: currentOCRData.original_date,
                 original_vendor: currentOCRData.original_vendor,
                 full_text: currentOCRData.full_text,
                 was_corrected: wasCorrected
-            };
-            
-            ocrDataInput.value = JSON.stringify(ocrData);
-            console.log('OCR data set:', ocrDataInput.value);
+            });
         }
         
         closeReviewModal();
         showMessage('Data confirmed. Click "Add Expense" to save.', 'success');
-        
-        // Auto-focus the Add button to guide user
         form.querySelector('.btn-primary').focus();
     });
     
@@ -228,17 +225,13 @@ document.addEventListener('DOMContentLoaded', () => {
     form.addEventListener('submit', (e) => {
         e.preventDefault();
         
-        console.log('Form submitting...');
-        console.log('Invoice filename:', invoiceFilenameInput.value);
-        console.log('OCR data:', ocrDataInput.value);
-        
         const btn = form.querySelector('.btn-primary');
         btn.disabled = true;
         btn.textContent = 'Adding...';
         
-        // Ensure all fields are included in FormData
         const formData = new FormData();
         formData.append('date', dateInput.value);
+        formData.append('currency', currencyInput.value);
         formData.append('amount', amountInput.value);
         formData.append('category', categorySelect.value);
         formData.append('vendor', vendorInput.value);
@@ -246,18 +239,12 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('invoice_filename', invoiceFilenameInput.value);
         formData.append('ocr_data', ocrDataInput.value);
         
-        console.log('FormData entries:');
-        for (let [key, val] of formData.entries()) {
-            console.log(key, ':', val);
-        }
-        
         fetch('/api/expenses', {
             method: 'POST',
             body: formData
         })
         .then(r => r.json())
         .then(data => {
-            console.log('Server response:', data);
             if (data.success) {
                 showMessage('Expense added!', 'success');
                 setTimeout(() => location.reload(), 500);
@@ -268,7 +255,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         })
         .catch(err => {
-            console.error('Submit error:', err);
             showMessage('Error: ' + err.message, 'error');
             btn.disabled = false;
             btn.textContent = 'Add Expense';
@@ -315,7 +301,6 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(r => r.json())
         .then(data => {
             if (data.success) {
-                // Add to all dropdowns
                 [categorySelect, reviewCategory].forEach(sel => {
                     if (sel) {
                         const opt = new Option(data.category, data.category);
