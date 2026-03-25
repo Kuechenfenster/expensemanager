@@ -35,7 +35,8 @@ with app.app_context():
             db.session.execute(text("""
                 ALTER TABLE expenses 
                 ADD COLUMN IF NOT EXISTS ocr_confidence FLOAT,
-                ADD COLUMN IF NOT EXISTS ocr_text TEXT
+                ADD COLUMN IF NOT EXISTS ocr_text TEXT,
+                ADD COLUMN IF NOT EXISTS currency VARCHAR(3) DEFAULT 'EUR'
             """))
             
             # Ensure new tables exist
