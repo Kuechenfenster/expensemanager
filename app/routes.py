@@ -27,7 +27,7 @@ def index():
     init_default_users()
     expenses = Expense.query.order_by(Expense.date.desc()).all()
     categories = Category.get_default_categories()
-    users = User.query.all()
+    users = [user.to_dict() for user in User.query.all()]
     return render_template('index.html', expenses=expenses, categories=categories, 
                          currencies=CURRENCIES, users=users, category_colors=CATEGORY_COLORS)
 
@@ -35,7 +35,8 @@ def index():
 def analytics():
     categories = Category.get_default_categories()
     expenses = Expense.query.all()
-    users = User.query.all()
+    users_list = [user.to_dict() for user in User.query.all()]
+    users = User.query.all()  # Keep for relationship queries
 
     # Calculate totals by currency
     totals_by_currency = {}
