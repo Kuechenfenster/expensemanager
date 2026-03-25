@@ -89,7 +89,22 @@
 
 <!-- Expenses List -->
 <section class="section">
-    <h2 class="section-title">Recent Expenses</h2>
+    <div class="section-header">
+        <h2 class="section-title">Recent Expenses</h2>
+        <div class="table-filters">
+            <div class="filter-group">
+                <label for="dateFrom">From</label>
+                <input type="date" id="dateFrom" name="date_from">
+            </div>
+            <div class="filter-group">
+                <label for="dateTo">To</label>
+                <input type="date" id="dateTo" name="date_to">
+            </div>
+            <button type="button" class="btn-secondary" id="applyDateFilter">Filter</button>
+            <button type="button" class="btn-secondary" id="clearDateFilter">Clear</button>
+            <button type="button" class="btn-primary" id="exportCSV">📥 Export CSV</button>
+        </div>
+    </div>
     
     <div class="expense-table-container">
         <table class="expense-table" id="expensesTable">

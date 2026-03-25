@@ -621,3 +621,58 @@ body {
         flex-direction: column;
     }
 }
+
+/* Table Filters Section */
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+}
+
+.table-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+    align-items: flex-end;
+}
+
+.table-filters .filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.table-filters .filter-group label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.table-filters input[type="date"] {
+    width: 140px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.875rem;
+}
+
+#exportCSV {
+    margin-left: var(--spacing-sm);
+}
+
+@media (max-width: 768px) {
+    .section-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .table-filters {
+        width: 100%;
+    }
+    
+    .table-filters input[type="date"] {
+        width: 130px;
+    }
+}

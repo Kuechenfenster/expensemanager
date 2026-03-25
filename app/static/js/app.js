@@ -11,6 +11,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const ocrDataInput = document.getElementById('ocrData');
     const formMessage = document.getElementById('formMessage');
     const uploadStatus = document.getElementById('uploadStatus');
+
+    // Date range filter elements
+    const dateFromInput = document.getElementById('dateFrom');
+    const dateToInput = document.getElementById('dateTo');
+    const applyDateFilterBtn = document.getElementById('applyDateFilter');
+    const clearDateFilterBtn = document.getElementById('clearDateFilter');
+    const exportCSVBtn = document.getElementById('exportCSV');
     
     // Upload buttons
     const cameraBtn = document.getElementById('cameraBtn');
@@ -56,6 +63,38 @@ document.addEventListener('DOMContentLoaded', () => {
             sessionStorage.setItem('selectedUserId', userSelect.value);
         });
     }
+
+    // Date range filter handlers
+    if (dateFromInput && dateToInput) {
+        // Set default date range (last 90 days)
+        const today = new Date();
+        const ninetyDaysAgo = new Date();
+        ninetyDaysAgo.setDate(today.getDate() - 90);
+        dateToInput.value = today.toISOString().split('T')[0];
+        dateFromInput.value = ninetyDaysAgo.toISOString().split('T')[0];
+
+        // Apply filter on button click
+        if (applyDateFilterBtn) {
+            applyDateFilterBtn.addEventListener('click', loadExpenses);
+        }
+
+        // Clear filter
+        if (clearDateFilterBtn) {
+            clearDateFilterBtn.addEventListener('click', () => {
+                dateFromInput.value = '';
+                dateToInput.value = '';
+                loadExpenses();
+            });
+        }
+    }
+
+    // CSV export handler
+    if (exportCSVBtn) {
+        exportCSVBtn.addEventListener('click', exportToCSV);
+    }
+
+    // Initial load
+    loadExpenses();
     
     // Camera and file upload handlers
     cameraBtn.addEventListener('click', () => cameraInput.click());
@@ -347,3 +386,117 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => formMessage.style.display = 'none', 5000);
     }
 });
+
+
+// Load expenses with date range filter
+async function loadExpenses() {
+    const params = new URLSearchParams();
+
+    if (dateFromInput && dateFromInput.value) {
+        params.append('date_from', dateFromInput.value);
+    }
+    if (dateToInput && dateToInput.value) {
+        params.append('date_to', dateToInput.value);
+    }
+
+    try {
+        const response = await fetch(`/api/expenses?${params.toString()}`);
+        const expenses = await response.json();
+        updateExpensesTable(expenses);
+    } catch (error) {
+        console.error('Error loading expenses:', error);
+    }
+}
+
+// Update the expenses table with new data
+function updateExpensesTable(expenses) {
+    const tbody = document.querySelector('#expensesTable tbody');
+    if (!tbody) return;
+
+    tbody.innerHTML = expenses.map(exp => `
+        <tr data-id="${exp.id}">
+            <td>${exp.date}</td>
+            <td>${exp.user_name}</td>
+            <td><span class="category-badge">${exp.category}</span></td>
+            <td>${exp.vendor || '-'}</td>
+            <td>${exp.description || '-'}</td>
+            <td class="amount">${getCurrencySymbol(exp.currency)}${parseFloat(exp.amount).toFixed(2)}</td>
+            <td>${exp.invoice_filename ? `<a href="/uploads/${exp.invoice_filename}" target="_blank" class="invoice-link">📎</a>` : '<span class="no-invoice">-</span>'}</td>
+            <td><button class="btn-icon delete-btn" data-id="${exp.id}" title="Delete">🗑️</button></td>
+        </tr>
+    `).join('');
+
+    // Re-attach delete handlers
+    tbody.querySelectorAll('.delete-btn').forEach(btn => {
+        btn.addEventListener('click', handleDelete);
+    });
+}
+
+// Get currency symbol
+function getCurrencySymbol(currency) {
+    const symbols = {
+        'HKD': 'HK$',
+        'EUR': '€',
+        'USD': '$',
+        'CNY': '¥',
+        'NZD': 'NZ$',
+        'AUD': 'A$'
+    };
+    return symbols[currency] || currency;
+}
+
+// Handle delete button click
+async function handleDelete(e) {
+    const id = e.target.dataset.id;
+    if (!confirm('Delete this expense?')) return;
+
+    try {
+        const response = await fetch(`/api/expenses/${id}`, {
+            method: 'DELETE'
+        });
+        const result = await response.json();
+
+        if (result.success) {
+            e.target.closest('tr').remove();
+        }
+    } catch (error) {
+        console.error('Error deleting:', error);
+    }
+}
+
+// Export to CSV
+async function exportToCSV() {
+    const params = new URLSearchParams();
+
+    if (dateFromInput && dateFromInput.value) {
+        params.append('date_from', dateFromInput.value);
+    }
+    if (dateToInput && dateToInput.value) {
+        params.append('date_to', dateToInput.value);
+    }
+
+    // Create download link
+    const downloadUrl = `/api/expenses/export?${params.toString()}`;
+
+    // Use fetch to download
+    try {
+        const response = await fetch(downloadUrl);
+        if (!response.ok) throw new Error('Export failed');
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+
+        // Create temporary link and click
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `expenses_${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+
+    } catch (error) {
+        console.error('Export error:', error);
+        alert('Failed to export. Please try again.');
+    }
+}

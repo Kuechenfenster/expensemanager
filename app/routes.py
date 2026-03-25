@@ -1,11 +1,13 @@
-from flask import render_template, request, jsonify, send_from_directory
+from flask import render_template, request, jsonify, send_from_directory, Response
 from app import app, db
 from app.models import Expense, Category, User, InvoicePattern, OCRExtraction, CURRENCIES, CATEGORY_COLORS
 from app.ocr import process_invoice
 from werkzeug.utils import secure_filename
-from datetime import datetime
+from datetime import datetime, date
 import os
 import json
+import csv
+import io
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'bmp', 'tiff'}
 
@@ -90,6 +92,8 @@ def get_expenses():
     category = request.args.get('category')
     month = request.args.get('month')
     user_id = request.args.get('user_id')
+    date_from = request.args.get('date_from')
+    date_to = request.args.get('date_to')
 
     if category:
         query = query.filter_by(category=category)
@@ -105,8 +109,84 @@ def get_expenses():
     if user_id:
         query = query.filter_by(user_id=int(user_id))
 
+    # Date range filtering
+    if date_from:
+        try:
+            from_date = datetime.strptime(date_from, '%Y-%m-%d').date()
+            query = query.filter(Expense.date >= from_date)
+        except:
+            pass
+    if date_to:
+        try:
+            to_date = datetime.strptime(date_to, '%Y-%m-%d').date()
+            query = query.filter(Expense.date <= to_date)
+        except:
+            pass
+
     expenses = query.order_by(Expense.date.desc()).all()
     return jsonify([exp.to_dict() for exp in expenses])
+
+
+
+@app.route('/api/expenses/export', methods=['GET'])
+def export_expenses():
+    """Export expenses to CSV"""
+    query = Expense.query
+    category = request.args.get('category')
+    user_id = request.args.get('user_id')
+    date_from = request.args.get('date_from')
+    date_to = request.args.get('date_to')
+
+    # Apply filters
+    if category:
+        query = query.filter_by(category=category)
+    if user_id:
+        query = query.filter_by(user_id=int(user_id))
+    if date_from:
+        try:
+            from_date = datetime.strptime(date_from, '%Y-%m-%d').date()
+            query = query.filter(Expense.date >= from_date)
+        except:
+            pass
+    if date_to:
+        try:
+            to_date = datetime.strptime(date_to, '%Y-%m-%d').date()
+            query = query.filter(Expense.date <= to_date)
+        except:
+            pass
+
+    expenses = query.order_by(Expense.date.desc()).all()
+
+    # Create CSV
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    # Header
+    writer.writerow(['Date', 'User', 'Category', 'Vendor', 'Description', 'Currency', 'Amount', 'Invoice File'])
+
+    # Data rows
+    for exp in expenses:
+        writer.writerow([
+            exp.date.strftime('%Y-%m-%d'),
+            exp.user.name if exp.user else '',
+            exp.category,
+            exp.vendor or '',
+            exp.description or '',
+            exp.currency,
+            exp.amount,
+            exp.invoice_filename or ''
+        ])
+
+    # Create response
+    output.seek(0)
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={
+            'Content-Disposition': 'attachment; filename=expenses.csv',
+            'Content-Type': 'text/csv; charset=utf-8'
+        }
+    )
 
 @app.route('/api/expenses', methods=['POST'])
 def add_expense():
