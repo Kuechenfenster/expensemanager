@@ -33,11 +33,11 @@
     <div class="cards">
         {% if totals_by_currency %}
             {% for currency, amount in totals_by_currency.items() %}
-            {% set count = by_category.values()|map(attribute='count')|sum if by_category else expenses|length %}
+            {% set count = by_category.values()|map(attribute='count')|sum if by_category else 0 %}
             <div class="card card-total">
                 <div class="card-label">Total ({{ currency }})</div>
                 <div class="card-value" id="totalAmount">{{ currencies.get(currency, {}).get('symbol', currency) }}{{ "%.2f" % amount }}</div>
-                <div class="card-sub" id="expenseCount">{{ count }} expenses</div>
+                <div class="card-sub" id="expenseCount">{{ count if count else expenses|length }} expenses</div>
             </div>
             {% endfor %}
         {% else %}
@@ -67,12 +67,17 @@
     <h2 class="section-title">Monthly Breakdown</h2>
     <div id="monthlyChart" class="chart">
         {% for month, currencies_amount in monthly.items()|sort(reverse=true) %}
+        {% set month_total = currencies_amount.values()|sum %}
+        {% set max_monthly = 1 %}
+        {% for m, ca in monthly.items() %}
+            {% if ca.values()|sum > max_monthly %}{% set max_monthly = ca.values()|sum %}{% endif %}
+        {% endfor %}
         <div class="chart-bar">
             <div class="bar-label">{{ month }}</div>
             <div class="bar-track">
-                <div class="bar-fill" style="width: {{ (currencies_amount.values()|sum / monthly.values()|map('values')|flatten|select('number')|list|max * 100) if monthly.values()|map('values')|flatten|select('number')|list|max > 0 else 0 }}%"></div>
+                <div class="bar-fill" style="width: {{ (month_total / max_monthly * 100) if max_monthly > 0 else 0 }}%"></div>
             </div>
-            <div class="bar-value">
+            <div class="bar-value" style="font-size: 0.75em;">
                 {% for curr, amt in currencies_amount.items() %}
                 {{ currencies.get(curr, {}).get('symbol', curr) }}{{ "%.0f" % amt }}{% if not loop.last %}, {% endif %}
                 {% endfor %}
